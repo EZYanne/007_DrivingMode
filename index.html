@@ -1,0 +1,879 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>007 — Driving HUD</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gold:#C9A84C;--gold2:#B8953E;--gold-dim:#7A6030;
+  --gold-faint:rgba(201,168,76,0.08);--gold-glow:rgba(201,168,76,0.18);
+  --bg:#0E0D0B;--bg2:#141310;--bg3:#1A1916;
+  --text:#EDE8DC;--muted:#6B6555;--muted2:#3A3428;
+  --border:rgba(201,168,76,0.15);--border2:rgba(201,168,76,0.30);
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Barlow Condensed',sans-serif}
+
+/* LAYOUT */
+#hud{display:grid;grid-template-columns:290px 1fr 440px;width:100vw;height:calc(100vh - 70px)}
+
+/* LEFT */
+#left{background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:28px 22px 20px;gap:0;overflow:hidden}
+.logo{display:flex;align-items:center;gap:8px;margin-bottom:24px}
+.logo-text{font-weight:700;font-size:30px;color:var(--gold);letter-spacing:3px;line-height:1}
+.logo-gun{width:30px;height:19px;position:relative;top:-1px}
+.section-heading{font-weight:600;font-size:21px;letter-spacing:5px;color:var(--gold);text-transform:uppercase;margin-bottom:5px}
+.section-rule{width:44px;height:1px;background:var(--gold-dim);margin-bottom:20px}
+
+/* Stats */
+.stat-row{display:flex;align-items:flex-start;gap:14px;margin-bottom:18px}
+.stat-ico{width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:6px}
+.stat-ico svg{width:34px;height:34px;stroke:var(--muted);stroke-width:1.4;fill:none}
+.stat-label{font-weight:500;font-size:12px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:-2px}
+.stat-val{font-weight:200;font-size:50px;line-height:1;color:var(--text);letter-spacing:-2px;display:flex;align-items:baseline;gap:4px}
+.stat-unit{font-weight:400;font-size:15px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+
+/* GPS Status */
+.gps-bar{margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.gps-dot{width:6px;height:6px;border-radius:50%;background:#4CAF50;box-shadow:0 0 6px #4CAF50;flex-shrink:0;animation:blink 2s ease-in-out infinite}
+.gps-txt{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+.gps-acc{font-size:11px;letter-spacing:1px;color:var(--gold-dim)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Music */
+.music-card{margin-top:auto;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:11px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;flex-shrink:0}
+.music-ico svg{width:24px;height:24px;stroke:var(--muted);stroke-width:1.3;fill:none}
+.music-name{font-weight:600;font-size:14px;letter-spacing:3px;color:var(--text);text-transform:uppercase}
+.music-sub{font-weight:400;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+.eq-bars{display:flex;align-items:flex-end;gap:3px;height:20px}
+.eq-bars span{display:block;width:3px;background:var(--gold);border-radius:1px;animation:eq 1.1s ease-in-out infinite}
+.eq-bars span:nth-child(1){animation-delay:0s}
+.eq-bars span:nth-child(2){animation-delay:.15s}
+.eq-bars span:nth-child(3){animation-delay:.3s}
+.eq-bars span:nth-child(4){animation-delay:.08s}
+.eq-bars span:nth-child(5){animation-delay:.22s}
+@keyframes eq{0%,100%{height:3px}50%{height:18px}}
+.eq-bars.paused span{animation-play-state:paused;height:4px}
+
+/* CENTER */
+#center{background:var(--bg);display:flex;align-items:center;justify-content:center;position:relative}
+.compass-outer{position:relative;width:470px;height:470px}
+.dir{position:absolute;font-weight:500;font-size:14px;letter-spacing:2px;color:var(--muted);line-height:1}
+.dir.N{top:3px;left:50%;transform:translateX(-50%);color:var(--text);font-size:21px;font-weight:600}
+.dir.S{bottom:3px;left:50%;transform:translateX(-50%)}
+.dir.E{right:3px;top:50%;transform:translateY(-50%)}
+.dir.W{left:3px;top:50%;transform:translateY(-50%)}
+.dir.NW{top:50px;left:44px}
+.dir.NE{top:50px;right:44px}
+.dir.SW{bottom:50px;left:44px}
+.dir.SE{bottom:50px;right:44px}
+.dir-i{position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:10px;font-weight:400;letter-spacing:1px;color:var(--muted2)}
+#compassCanvas{position:absolute;inset:0;width:100%;height:100%}
+.compass-inner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:228px;height:228px;border-radius:50%;background:radial-gradient(circle,#131210 55%,#0e0d0b 100%);border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.ci-mode{font-weight:500;font-size:10px;letter-spacing:5px;color:var(--gold);text-transform:uppercase;margin-bottom:0px}
+.ci-speed{font-weight:200;font-size:78px;line-height:1;color:#fff;letter-spacing:-3px}
+.ci-mph{font-weight:400;font-size:12px;letter-spacing:5px;color:var(--muted);text-transform:uppercase;margin-bottom:8px}
+.ci-icons{display:flex;align-items:flex-end;gap:18px}
+.ci-icon{display:flex;flex-direction:column;align-items:center;gap:2px}
+.ci-icon svg{width:20px;height:20px;stroke:var(--muted2);stroke-width:1.4;fill:none}
+.ci-lbl{font-weight:400;font-size:8px;letter-spacing:2px;color:var(--muted2);text-transform:uppercase}
+
+/* RIGHT */
+#right{background:var(--bg);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+
+/* Notification */
+#notif{margin:18px 18px 0;background:var(--bg2);border:1px solid var(--border2);border-radius:3px;padding:13px;display:flex;align-items:center;gap:11px;flex-shrink:0;transition:opacity .4s,transform .4s}
+#notif.gone{opacity:0;transform:translateY(-8px);pointer-events:none}
+.notif-badge{width:46px;height:46px;border-radius:50%;border:1px solid var(--border2);background:#1a1916;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
+.notif-crown{font-size:10px;color:var(--gold-dim);line-height:1}
+.notif-m{font-weight:600;font-size:21px;color:var(--gold);line-height:1;font-style:italic}
+.notif-body{flex:1;min-width:0}
+.notif-title{font-weight:600;font-size:10px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:3px}
+.notif-msg{font-weight:400;font-size:13px;letter-spacing:.3px;color:var(--text)}
+.notif-close{background:none;border:none;cursor:pointer;font-size:17px;color:var(--muted);line-height:1;padding:3px;transition:color .2s;align-self:flex-start}
+.notif-close:hover{color:var(--gold)}
+
+/* Map search panel */
+#search-panel{margin:12px 18px 0;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.search-row{display:flex;align-items:center;gap:6px;position:relative}
+.search-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.search-dot.origin{background:transparent;border:2px solid var(--gold)}
+.search-dot.dest{background:var(--gold)}
+.search-input{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-weight:400;font-size:13px;letter-spacing:1px;padding:7px 10px;outline:none;transition:border-color .2s}
+.search-input::placeholder{color:var(--muted)}
+.search-input:focus{border-color:var(--border2)}
+.search-input:focus+.autocomplete-list{display:block}
+.autocomplete-list{display:none;position:absolute;top:100%;left:18px;right:0;z-index:100;background:var(--bg2);border:1px solid var(--border2);border-radius:3px;margin-top:2px;max-height:160px;overflow-y:auto}
+.autocomplete-list.show{display:block}
+.ac-item{padding:9px 12px;font-size:12px;letter-spacing:.5px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover{background:var(--gold-faint);color:var(--gold)}
+.ac-item .ac-main{font-weight:500;font-size:13px}
+.ac-item .ac-sub{font-size:11px;color:var(--muted);letter-spacing:.5px;margin-top:1px}
+.search-go{background:var(--gold-dim);border:1px solid var(--gold-dim);border-radius:3px;color:var(--gold);font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:11px;letter-spacing:3px;text-transform:uppercase;padding:7px 12px;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .2s}
+.search-go:hover{background:var(--gold);color:#0e0d0b}
+.search-sep{display:flex;align-items:center;gap:6px;padding-left:16px}
+.search-sep-line{flex:1;height:1px;background:var(--border)}
+.swap-btn{background:none;border:1px solid var(--border);border-radius:2px;color:var(--muted);font-size:10px;padding:2px 8px;cursor:pointer;letter-spacing:1px;transition:all .2s}
+.swap-btn:hover{border-color:var(--border2);color:var(--gold)}
+
+/* Map */
+#map-wrap{flex:1;margin:10px 18px 0;border:1px solid var(--border);border-radius:3px;overflow:hidden;position:relative;min-height:0}
+#map{width:100%;height:100%}
+
+/* Nav strip */
+#nav{margin:12px 18px 18px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;display:grid;grid-template-columns:1fr 1px 1fr 1px 1fr;flex-shrink:0}
+.nav-sep{background:var(--border)}
+.nav-block{padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.nav-lbl{font-weight:400;font-size:10px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:1px}
+.nav-val{font-weight:300;font-size:32px;line-height:1;color:var(--text);letter-spacing:-1px}
+.nav-unit{font-weight:400;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+.nav-arrow svg{width:30px;height:30px;stroke:var(--gold);stroke-width:2.5;fill:none}
+
+/* BOTTOM */
+#bottom{position:fixed;bottom:0;left:0;right:0;height:70px;background:rgba(14,13,11,.97);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:10px;z-index:50}
+.mbtn{background:none;border:1px solid var(--border);border-radius:2px;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:12px;letter-spacing:3px;text-transform:uppercase;padding:8px 18px;cursor:pointer;transition:all .2s}
+.mbtn:hover{border-color:var(--border2);color:var(--gold)}
+.mbtn.on{border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,.07)}
+.bsep{width:1px;height:30px;background:var(--border);flex-shrink:0}
+.gbtn{background:none;border:1px solid var(--border);border-radius:2px;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:11px;letter-spacing:2px;text-transform:uppercase;padding:7px 13px;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .2s}
+.gbtn:hover{border-color:var(--border2);color:var(--gold)}
+.gbtn.red:hover{border-color:rgba(200,50,50,.5);color:#c83232}
+.gbtn svg{width:14px;height:14px;stroke:currentColor;stroke-width:1.6;fill:none}
+.bstatus{margin-left:auto;display:flex;align-items:center;gap:20px}
+.bstat-item{display:flex;align-items:center;gap:8px}
+.bdot{width:6px;height:6px;border-radius:50%;background:#4CAF50;box-shadow:0 0 6px #4CAF50;animation:blink 2s ease-in-out infinite}
+.bstat{font-weight:400;font-size:10px;letter-spacing:3px;color:var(--muted);text-transform:uppercase}
+.live-clock{font-family:'Share Tech Mono',monospace;font-size:16px;color:var(--gold);letter-spacing:2px}
+
+/* MODAL */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s;backdrop-filter:blur(3px)}
+#overlay.on{opacity:1;pointer-events:all}
+#modal{background:var(--bg2);border:1px solid var(--border2);border-radius:4px;padding:26px 30px;min-width:350px;max-width:460px;transform:translateY(12px);transition:transform .3s}
+#overlay.on #modal{transform:translateY(0)}
+.modal-title{font-weight:600;font-size:12px;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:12px;padding-bottom:11px;border-bottom:1px solid var(--border)}
+.modal-body{font-weight:400;font-size:15px;color:var(--text);line-height:1.6}
+.modal-foot{margin-top:20px;display:flex;gap:10px;justify-content:flex-end}
+.mmbtn{background:none;border:1px solid var(--border);border-radius:2px;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-weight:500;font-size:11px;letter-spacing:3px;text-transform:uppercase;padding:7px 18px;cursor:pointer;transition:all .2s}
+.mmbtn:hover{border-color:var(--border2);color:var(--gold)}
+.mmbtn.ok{border-color:var(--gold-dim);color:var(--gold);background:rgba(201,168,76,.07)}
+.mmbtn.ok:hover{border-color:var(--gold)}
+
+/* TOAST */
+#toast{position:fixed;bottom:84px;right:22px;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:9px 20px;font-weight:500;font-size:11px;letter-spacing:4px;color:var(--gold);text-transform:uppercase;z-index:300;transform:translateX(130%);transition:transform .4s cubic-bezier(.4,0,.2,1)}
+#toast.show{transform:translateX(0)}
+
+/* warning flash */
+@keyframes warn{0%,100%{color:var(--text)}50%{color:#c84040}}
+</style>
+</head>
+<body>
+<div id="hud">
+
+<!-- LEFT -->
+<div id="left">
+  <div class="logo">
+    <span class="logo-text">007</span>
+    <svg class="logo-gun" viewBox="0 0 36 22" fill="none">
+      <rect x="0" y="9" width="22" height="7" rx="1.5" fill="var(--gold)"/>
+      <rect x="22" y="11" width="12" height="3" rx="1" fill="var(--gold)"/>
+      <rect x="7" y="16" width="3" height="5" rx="1" fill="var(--gold)"/>
+      <rect x="3" y="6" width="6" height="3" rx="1" fill="var(--gold)"/>
+    </svg>
+  </div>
+
+  <div class="section-heading">Driving Mode</div>
+  <div class="section-rule"></div>
+
+  <!-- GPS -->
+  <div class="gps-bar">
+    <div class="gps-dot" id="gps-dot"></div>
+    <span class="gps-txt" id="gps-txt">Acquiring GPS...</span>
+    <span class="gps-acc" id="gps-acc"></span>
+  </div>
+
+  <!-- SPEED -->
+  <div class="stat-row">
+    <div class="stat-ico">
+      <svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="15" stroke-width="1.2"/><path d="M19 19 L13 13" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round"/><circle cx="19" cy="19" r="1.8" fill="var(--muted)" stroke="none"/><line x1="19" y1="5" x2="19" y2="8" stroke="var(--muted2)" stroke-width="1"/><line x1="30" y1="11" x2="28" y2="13" stroke="var(--muted2)" stroke-width="1"/><line x1="33" y1="19" x2="30" y2="19" stroke="var(--muted2)" stroke-width="1"/><line x1="9" y1="11" x2="11" y2="13" stroke="var(--muted2)" stroke-width="1"/></svg>
+    </div>
+    <div>
+      <div class="stat-label">Speed</div>
+      <div class="stat-val"><span id="v-speed">0</span><span class="stat-unit">KPH</span></div>
+    </div>
+  </div>
+
+  <!-- HEADING -->
+  <div class="stat-row">
+    <div class="stat-ico">
+      <svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="15" stroke-width="1.2"/><polygon points="19,6 22,19 19,16 16,19" fill="var(--gold)" stroke="none"/><polygon points="19,32 16,19 19,22 22,19" fill="var(--muted2)" stroke="none"/></svg>
+    </div>
+    <div>
+      <div class="stat-label">Heading</div>
+      <div class="stat-val"><span id="v-heading">N</span></div>
+    </div>
+  </div>
+
+  <!-- DISTANCE -->
+  <div class="stat-row">
+    <div class="stat-ico">
+      <svg viewBox="0 0 38 38"><path d="M19 33 C19 33 8 24 8 16 A11 11 0 0 1 30 16 C30 24 19 33 19 33Z" stroke="var(--muted)" stroke-width="1.3" fill="none"/><circle cx="19" cy="16" r="3.5" stroke="var(--muted)" stroke-width="1.2" fill="none"/></svg>
+    </div>
+    <div>
+      <div class="stat-label">Accuracy</div>
+      <div class="stat-val"><span id="v-acc">--</span><span class="stat-unit" id="v-acc-unit">M</span></div>
+    </div>
+  </div>
+
+  <!-- MUSIC -->
+  <div class="music-card" id="musicCard" onclick="toggleMusic()">
+    <div class="music-ico">
+      <svg viewBox="0 0 28 28"><path d="M10 22V8L24 5V19" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="22" r="3" stroke="var(--muted)" stroke-width="1.2" fill="none"/><circle cx="21" cy="19" r="3" stroke="var(--muted)" stroke-width="1.2" fill="none"/></svg>
+    </div>
+    <div class="music-info">
+      <div class="music-name">Bond Theme</div>
+      <div class="music-sub">Now Playing</div>
+    </div>
+    <div class="eq-bars" id="eqBars">
+      <span style="height:7px"></span><span style="height:13px"></span>
+      <span style="height:5px"></span><span style="height:18px"></span>
+      <span style="height:9px"></span>
+    </div>
+  </div>
+</div>
+
+<!-- CENTER -->
+<div id="center">
+  <div class="compass-outer">
+    <canvas id="compassCanvas" width="470" height="470"></canvas>
+    <div class="dir-i">I</div>
+    <div class="dir N">N</div><div class="dir S">S</div>
+    <div class="dir E">E</div><div class="dir W">W</div>
+    <div class="dir NW">NW</div><div class="dir NE">NE</div>
+    <div class="dir SW">SW</div><div class="dir SE">SE</div>
+    <div class="compass-inner">
+      <div class="ci-mode">Driving Mode</div>
+      <div class="ci-speed" id="ci-spd">0</div>
+      <div class="ci-mph">KPH</div>
+      <div class="ci-icons">
+        <div class="ci-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-width="1.2"/><path d="M12 12L8.5 8.5" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="1.5" fill="var(--muted2)" stroke="none"/></svg>
+          <div class="ci-lbl">Speed</div>
+        </div>
+        <div class="ci-icon" style="margin:0 4px">
+          <svg viewBox="0 0 28 20" width="30" height="20" fill="none"><path d="M4 18L10 2" stroke="var(--muted2)" stroke-width="1.3" stroke-linecap="round"/><path d="M24 18L18 2" stroke="var(--muted2)" stroke-width="1.3" stroke-linecap="round"/><line x1="14" y1="4" x2="14" y2="8" stroke="var(--muted2)" stroke-width="1.2" stroke-linecap="round"/><line x1="14" y1="11" x2="14" y2="15" stroke="var(--muted2)" stroke-width="1.2" stroke-linecap="round"/></svg>
+          <div class="ci-lbl">Auto</div>
+        </div>
+        <div class="ci-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 3L20 7V13C20 17 16 21 12 22C8 21 4 17 4 13V7Z" stroke-width="1.2"/><path d="M12 3L12 22" stroke-width=".6" stroke-dasharray="2 2"/><path d="M4 13L20 13" stroke-width=".6" stroke-dasharray="2 2"/></svg>
+          <div class="ci-lbl">Safety</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT -->
+<div id="right">
+  <!-- Notification -->
+  <div id="notif">
+    <div class="notif-badge"><span class="notif-crown">♛</span><span class="notif-m">M</span></div>
+    <div class="notif-body">
+      <div class="notif-title">New Message</div>
+      <div class="notif-msg" id="notif-text">M has assigned a new mission.</div>
+    </div>
+    <button class="notif-close" onclick="dismissNotif()">✕</button>
+  </div>
+
+  <!-- Search Panel -->
+  <div id="search-panel">
+    <div class="search-row">
+      <div class="search-dot origin"></div>
+      <input class="search-input" id="origin-input" type="text" placeholder="Starting point..." autocomplete="off" oninput="handleInput('origin',this.value)" onfocus="showList('origin')" onblur="hideList('origin')">
+      <div class="autocomplete-list" id="origin-list"></div>
+      <button class="search-go" onclick="routeGo()">GO</button>
+    </div>
+    <div class="search-sep">
+      <div class="search-sep-line"></div>
+      <button class="swap-btn" onclick="swapPoints()">⇅ SWAP</button>
+      <div class="search-sep-line"></div>
+    </div>
+    <div class="search-row">
+      <div class="search-dot dest"></div>
+      <input class="search-input" id="dest-input" type="text" placeholder="Destination..." autocomplete="off" oninput="handleInput('dest',this.value)" onfocus="showList('dest')" onblur="hideList('dest')">
+      <div class="autocomplete-list" id="dest-list"></div>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div id="map-wrap"><div id="map"></div></div>
+
+  <!-- Nav Strip -->
+  <div id="nav">
+    <div class="nav-block">
+      <div class="nav-lbl">ETA</div>
+      <div style="display:flex;align-items:baseline;gap:3px">
+        <span class="nav-val" id="nav-eta">--</span>
+        <span class="nav-unit">MIN</span>
+      </div>
+    </div>
+    <div class="nav-sep"></div>
+    <div class="nav-block">
+      <div class="nav-lbl" id="nav-turn-lbl">--</div>
+      <div class="nav-arrow"><svg id="nav-arrow" viewBox="0 0 24 24"><path d="M12 18V6M8 10l4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div style="display:flex;align-items:baseline;gap:3px">
+        <span class="nav-val" id="nav-tdist">--</span>
+        <span class="nav-unit">KM</span>
+      </div>
+    </div>
+    <div class="nav-sep"></div>
+    <div class="nav-block">
+      <div class="nav-lbl">Arrival</div>
+      <div class="nav-val" id="nav-arr" style="font-size:18px;letter-spacing:0">--:--</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- BOTTOM -->
+<div id="bottom">
+  <button class="mbtn on" onclick="setMode('driving',this)">Driving</button>
+  <button class="mbtn" onclick="setMode('stealth',this)">Stealth</button>
+  <button class="mbtn" onclick="setMode('pursuit',this)">Pursuit</button>
+  <button class="mbtn" onclick="setMode('escape',this)">Escape</button>
+  <div class="bsep"></div>
+  <button class="gbtn" onclick="arm('ejector')"><svg viewBox="0 0 24 24"><path d="M12 2v14M9 6l3-4 3 4M5 20h14M8 16h8" stroke-linecap="round" stroke-linejoin="round"/></svg>Ejector</button>
+  <button class="gbtn" onclick="arm('oil')"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="18" rx="7" ry="3"/><path d="M5 18V12l7-8 7 8v6" stroke-linecap="round" stroke-linejoin="round"/></svg>Oil Slick</button>
+  <button class="gbtn" onclick="arm('boost')"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linecap="round" stroke-linejoin="round"/></svg>Nitro</button>
+  <button class="gbtn red" onclick="arm('missile')"><svg viewBox="0 0 24 24"><path d="M22 2L13 11M22 2h-7M22 2v7"/><path d="M13 11L7 17l-3 1 1-3 6-6"/><circle cx="5" cy="19" r="1" fill="currentColor"/></svg>Missiles</button>
+  <div class="bstatus">
+    <div class="bstat-item"><div class="bdot"></div><span class="bstat">MI6 Link</span></div>
+    <div class="bstat-item"><div class="bdot" style="background:#C9A84C;box-shadow:0 0 6px #C9A84C"></div><span class="bstat" id="mode-txt">Driving Mode</span></div>
+    <span class="live-clock" id="live-clock">--:--:--</span>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="overlay" onclick="if(event.target===this)closeModal()">
+  <div id="modal">
+    <div class="modal-title" id="modal-t">Gadget Arm</div>
+    <div class="modal-body" id="modal-b"></div>
+    <div class="modal-foot">
+      <button class="mmbtn" onclick="closeModal()">Abort</button>
+      <button class="mmbtn ok" onclick="fire()">Confirm</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ===== GOOGLE MAPS STYLE =====
+const BOND_STYLE=[
+  {elementType:"geometry",stylers:[{color:"#0e0d0b"}]},
+  {elementType:"labels.text.fill",stylers:[{color:"#6B6555"}]},
+  {elementType:"labels.text.stroke",stylers:[{color:"#0e0d0b"}]},
+  {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#1a1916"}]},
+  {featureType:"landscape",elementType:"geometry",stylers:[{color:"#0a0908"}]},
+  {featureType:"poi",elementType:"geometry",stylers:[{color:"#111008"}]},
+  {featureType:"poi",elementType:"labels.text.fill",stylers:[{color:"#3a3428"}]},
+  {featureType:"poi.park",elementType:"geometry",stylers:[{color:"#090e07"}]},
+  {featureType:"road",elementType:"geometry",stylers:[{color:"#1e1c18"}]},
+  {featureType:"road",elementType:"geometry.stroke",stylers:[{color:"#2a2820"}]},
+  {featureType:"road",elementType:"labels.text.fill",stylers:[{color:"#5a5040"}]},
+  {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#2a2618"}]},
+  {featureType:"road.highway",elementType:"geometry.stroke",stylers:[{color:"#3a3420"}]},
+  {featureType:"road.highway",elementType:"labels.text.fill",stylers:[{color:"#8a7840"}]},
+  {featureType:"transit",elementType:"geometry",stylers:[{color:"#0a0908"}]},
+  {featureType:"water",elementType:"geometry",stylers:[{color:"#060504"}]},
+  {featureType:"water",elementType:"labels.text.fill",stylers:[{color:"#2a2418"}]},
+];
+
+let map, geocoder, directionsService, directionsRenderer, autocompleteService;
+let originPlace=null, destPlace=null;
+let currentRouteSteps=[], stepIndex=0;
+let pendingGadget=null, musicOn=true;
+
+// DB
+const DB={
+  vehicle:{speed:0,heading:0,accuracy:0,lat:0,lng:0,mode:'driving'},
+  nav:{eta:'--',tdist:'--',turn:'straight',arrivalTime:'--:--'},
+  msgs:['M has assigned a new mission.','Q Branch: Package en route to your location.','Moneypenny: Rendezvous confirmed.','⚠ THREAT: Hostile vehicle detected — 400m.','Safe house cleared. Proceed to destination.'],
+  gadgets:{
+    ejector:{name:'Ejector Seat',msg:'Ejector seat primed. Confirm launch sequence.',red:false},
+    oil:{name:'Oil Slick',msg:'Rear oil deployment ready. Confirm release?',red:false},
+    boost:{name:'Nitro Boost',msg:'Nitro injection armed. Peak velocity unlocked.',red:false},
+    missile:{name:'Missile System',msg:'⚠ WEAPONS HOT — Confirm missile lock and launch.',red:true}
+  }
+};
+
+// ===== CLOCK =====
+function updateClock(){
+  const n=new Date();
+  let h=n.getHours(),m=n.getMinutes(),s=n.getSeconds();
+  const ap=h>=12?'PM':'AM'; h=h%12||12;
+  document.getElementById('live-clock').textContent=
+    String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+' '+ap;
+}
+setInterval(updateClock,1000); updateClock();
+
+// ===== GPS GEOLOCATION =====
+let watchId=null;
+let userMarker=null;
+let lastPos=null, lastTime=null;
+
+function startGPS(){
+  if(!navigator.geolocation){
+    document.getElementById('gps-txt').textContent='GPS Unavailable';
+    return;
+  }
+  watchId=navigator.geolocation.watchPosition(onPos, onPosErr,{
+    enableHighAccuracy:true, maximumAge:1000, timeout:10000
+  });
+}
+
+function onPos(pos){
+  const lat=pos.coords.latitude, lng=pos.coords.longitude;
+  const acc=pos.coords.accuracy;
+  const spd=pos.coords.speed; // m/s
+  const hdg=pos.coords.heading;
+
+  DB.vehicle.lat=lat; DB.vehicle.lng=lng; DB.vehicle.accuracy=acc;
+
+  // Speed in KPH
+  let kph=0;
+  if(spd!==null&&spd>=0) kph=spd*3.6;
+  else if(lastPos&&lastTime){
+    const dt=(pos.timestamp-lastTime)/1000;
+    if(dt>0){
+      const d=haversine(lastPos.lat,lastPos.lng,lat,lng);
+      kph=(d/dt)*3.6;
+    }
+  }
+  DB.vehicle.speed=kph;
+
+  // Heading
+  if(hdg!==null&&!isNaN(hdg)) DB.vehicle.heading=hdg;
+  else if(lastPos) DB.vehicle.heading=bearingTo(lastPos.lat,lastPos.lng,lat,lng);
+
+  lastPos={lat,lng}; lastTime=pos.timestamp;
+
+  // Update GPS bar
+  document.getElementById('gps-dot').style.background='#4CAF50';
+  document.getElementById('gps-dot').style.boxShadow='0 0 6px #4CAF50';
+  document.getElementById('gps-txt').textContent='GPS Active';
+  document.getElementById('gps-acc').textContent='±'+Math.round(acc)+'m';
+  document.getElementById('v-acc').textContent=Math.round(acc);
+
+  // Update speed display
+  const kphRound=Math.round(kph);
+  document.getElementById('v-speed').textContent=kphRound;
+  document.getElementById('ci-spd').textContent=kphRound;
+
+  // Heading display
+  document.getElementById('v-heading').textContent=headingLabel(DB.vehicle.heading);
+
+  // Update compass
+  targetHeading=DB.vehicle.heading;
+
+  // Move map to user position
+  if(map){
+    const latlng={lat,lng};
+    if(!userMarker){
+      userMarker=new google.maps.Marker({
+        position:latlng,map,
+        icon:{path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW,scale:5,fillColor:'#C9A84C',fillOpacity:1,strokeColor:'#C9A84C',strokeWeight:1,rotation:DB.vehicle.heading}
+      });
+      map.panTo(latlng);
+    } else {
+      userMarker.setPosition(latlng);
+      userMarker.setIcon({...userMarker.getIcon(),rotation:DB.vehicle.heading});
+      if(!destPlace) map.panTo(latlng);
+    }
+  }
+
+  // Update nav if route active
+  updateNavFromPosition(lat,lng);
+}
+
+function onPosErr(e){
+  document.getElementById('gps-txt').textContent='GPS Error';
+  document.getElementById('gps-dot').style.background='#c84040';
+  document.getElementById('gps-dot').style.boxShadow='0 0 6px #c84040';
+}
+
+// ===== MATH HELPERS =====
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function bearingTo(lat1,lon1,lat2,lon2){
+  const dL=(lon2-lon1)*Math.PI/180;
+  const y=Math.sin(dL)*Math.cos(lat2*Math.PI/180);
+  const x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-Math.sin(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.cos(dL);
+  return ((Math.atan2(y,x)*180/Math.PI)+360)%360;
+}
+function headingLabel(h){
+  const dirs=['N','NE','E','SE','S','SW','W','NW','N'];
+  return dirs[Math.round(h/45)];
+}
+
+// ===== UPDATE NAV FROM GPS =====
+function updateNavFromPosition(lat,lng){
+  if(!currentRouteSteps.length) return;
+  // Find closest step
+  let minD=Infinity, minI=stepIndex;
+  for(let i=stepIndex;i<Math.min(stepIndex+5,currentRouteSteps.length);i++){
+    const s=currentRouteSteps[i];
+    const d=haversine(lat,lng,s.end_location.lat(),s.end_location.lng());
+    if(d<minD){minD=d;minI=i;}
+  }
+  if(minD<50&&minI<currentRouteSteps.length-1) stepIndex=minI+1;
+
+  const step=currentRouteSteps[stepIndex]||currentRouteSteps[currentRouteSteps.length-1];
+  const distToEnd=haversine(lat,lng,step.end_location.lat(),step.end_location.lng())/1000;
+
+  // Maneuver type
+  const man=step.maneuver||'straight';
+  DB.nav.turn=man.includes('right')?'right':man.includes('left')?'left':man.includes('uturn')?'uturn':'straight';
+  DB.nav.tdist=distToEnd.toFixed(1);
+
+  // ETA: remaining distance / avg speed
+  let totalRemain=0;
+  for(let i=stepIndex;i<currentRouteSteps.length;i++) totalRemain+=currentRouteSteps[i].distance.value;
+  const spd=Math.max(10,DB.vehicle.speed);
+  const etaMin=Math.round((totalRemain/1000)/(spd/60));
+  DB.nav.eta=etaMin;
+
+  const arr=new Date(); arr.setMinutes(arr.getMinutes()+etaMin);
+  let ah=arr.getHours(),am=arr.getMinutes(),aap=ah>=12?'PM':'AM';
+  ah=ah%12||12;
+  DB.nav.arrivalTime=ah+':'+String(am).padStart(2,'0')+' '+aap;
+
+  document.getElementById('nav-eta').textContent=etaMin;
+  document.getElementById('nav-tdist').textContent=distToEnd.toFixed(1);
+  document.getElementById('nav-arr').textContent=DB.nav.arrivalTime;
+  updateArrow(DB.nav.turn, step.instructions||'Continue');
+}
+
+function updateArrow(turn,instructions){
+  const arrows={
+    right:'<path d="M7 12h10M13 8l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/>',
+    left:'<path d="M17 12H7M11 8l-4 4 4 4" stroke-linecap="round" stroke-linejoin="round"/>',
+    straight:'<path d="M12 18V6M8 10l4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/>',
+    uturn:'<path d="M8 18V10a4 4 0 018 0M12 6l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/>'
+  };
+  const labels={right:'Turn Right',left:'Turn Left',straight:'Continue',uturn:'U-Turn'};
+  document.getElementById('nav-arrow').innerHTML=arrows[turn]||arrows.straight;
+  // Strip HTML tags from instructions
+  const tmp=document.createElement('div'); tmp.innerHTML=instructions;
+  const txt=tmp.textContent||'Continue';
+  document.getElementById('nav-turn-lbl').textContent=txt.length>14?labels[turn]:txt;
+}
+
+// ===== COMPASS =====
+const cc=document.getElementById('compassCanvas');
+const ctx=cc.getContext('2d');
+let cHeading=0, targetHeading=0;
+
+function drawCompass(h){
+  const W=470,H=470,cx=235,cy=235;
+  const OR=222,IR=202,RR=216;
+  ctx.clearRect(0,0,W,H);
+
+  // Glow
+  const g1=ctx.createRadialGradient(cx,cy,IR,cx,cy,OR+22);
+  g1.addColorStop(0,'rgba(201,168,76,0)');
+  g1.addColorStop(.5,'rgba(201,168,76,0.09)');
+  g1.addColorStop(1,'rgba(201,168,76,0)');
+  ctx.beginPath(); ctx.arc(cx,cy,OR+12,0,Math.PI*2);
+  ctx.strokeStyle=g1; ctx.lineWidth=24; ctx.stroke();
+
+  // Outer ring
+  ctx.beginPath(); ctx.arc(cx,cy,OR,0,Math.PI*2);
+  ctx.strokeStyle='rgba(201,168,76,0.18)'; ctx.lineWidth=1; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,IR,0,Math.PI*2);
+  ctx.strokeStyle='rgba(201,168,76,0.10)'; ctx.lineWidth=1; ctx.stroke();
+
+  // Gold arc
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(-Math.PI/2);
+  const span=(h/360)*Math.PI*2;
+  ctx.beginPath(); ctx.arc(0,0,RR,-Math.PI*.15,-Math.PI*.15+span);
+  ctx.strokeStyle='#C9A84C'; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.stroke();
+  ctx.restore();
+
+  // Ticks
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate((h*Math.PI)/180);
+  for(let i=0;i<120;i++){
+    const angle=(i/120)*Math.PI*2;
+    const major=i%15===0,mid=i%5===0;
+    const len=major?20:mid?11:5;
+    const cos=Math.cos(angle),sin=Math.sin(angle);
+    ctx.beginPath();
+    ctx.moveTo(cos*IR,sin*IR); ctx.lineTo(cos*(IR-len),sin*(IR-len));
+    ctx.strokeStyle=major?'rgba(201,168,76,0.7)':mid?'rgba(201,168,76,0.25)':'rgba(201,168,76,0.1)';
+    ctx.lineWidth=major?1.5:mid?.8:.5;
+    ctx.stroke();
+  }
+  for(let i=0;i<24;i++){
+    const angle=(i/24)*Math.PI*2,r=IR-30;
+    ctx.beginPath(); ctx.arc(Math.cos(angle)*r,Math.sin(angle)*r,1.2,0,Math.PI*2);
+    ctx.fillStyle='rgba(201,168,76,0.2)'; ctx.fill();
+  }
+  ctx.restore();
+
+  // North pointer
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.beginPath(); ctx.moveTo(0,-OR+5); ctx.lineTo(-5,-OR+20); ctx.lineTo(5,-OR+20);
+  ctx.closePath(); ctx.fillStyle='#C9A84C'; ctx.fill();
+  ctx.restore();
+}
+(function loop(){
+  cHeading+=(targetHeading-cHeading)*0.05;
+  drawCompass(cHeading);
+  requestAnimationFrame(loop);
+})();
+
+// ===== GOOGLE MAPS INIT =====
+function initMap(){
+  geocoder=new google.maps.Geocoder();
+  directionsService=new google.maps.DirectionsService();
+  autocompleteService=new google.maps.places.AutocompleteService();
+
+  map=new google.maps.Map(document.getElementById('map'),{
+    center:{lat:14.5995,lng:120.9842}, // Manila default
+    zoom:14,
+    styles:BOND_STYLE,
+    disableDefaultUI:true,
+    gestureHandling:'greedy',
+  });
+
+  directionsRenderer=new google.maps.DirectionsRenderer({
+    suppressMarkers:true,
+    polylineOptions:{strokeColor:'#C9A84C',strokeOpacity:.9,strokeWeight:3}
+  });
+  directionsRenderer.setMap(map);
+
+  // Try to center on user
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(p=>{
+      map.panTo({lat:p.coords.latitude,lng:p.coords.longitude});
+      map.setZoom(15);
+    });
+  }
+  startGPS();
+}
+
+// ===== AUTOCOMPLETE =====
+let acTimers={origin:null,dest:null};
+let acResults={origin:[],dest:[]};
+
+function handleInput(type,val){
+  clearTimeout(acTimers[type]);
+  if(val.length<2){hideList(type);return;}
+  acTimers[type]=setTimeout(()=>queryAC(type,val),300);
+}
+
+function queryAC(type,val){
+  if(!autocompleteService)return;
+  const req={input:val,componentRestrictions:{}};
+  if(DB.vehicle.lat) req.location=new google.maps.LatLng(DB.vehicle.lat,DB.vehicle.lng);
+  autocompleteService.getPlacePredictions(req,(preds,status)=>{
+    if(status!==google.maps.places.PlacesServiceStatus.OK||!preds){hideList(type);return;}
+    acResults[type]=preds;
+    renderList(type,preds);
+  });
+}
+
+function renderList(type,preds){
+  const list=document.getElementById(type+'-list');
+  list.innerHTML='';
+  preds.slice(0,5).forEach((p,i)=>{
+    const el=document.createElement('div');
+    el.className='ac-item';
+    const main=p.structured_formatting.main_text||p.description;
+    const sub=p.structured_formatting.secondary_text||'';
+    el.innerHTML='<div class="ac-main">'+main+'</div>'+(sub?'<div class="ac-sub">'+sub+'</div>':'');
+    el.addEventListener('mousedown',e=>{
+      e.preventDefault();
+      selectPlace(type,p);
+    });
+    list.appendChild(el);
+  });
+  list.classList.add('show');
+}
+
+function showList(type){
+  if(acResults[type].length) document.getElementById(type+'-list').classList.add('show');
+}
+function hideList(type){
+  setTimeout(()=>document.getElementById(type+'-list').classList.remove('show'),200);
+}
+
+function selectPlace(type,pred){
+  document.getElementById(type+'-input').value=pred.description;
+  document.getElementById(type+'-list').classList.remove('show');
+  acResults[type]=[];
+  geocoder.geocode({placeId:pred.place_id},(res,status)=>{
+    if(status==='OK'&&res[0]){
+      const loc=res[0].geometry.location;
+      if(type==='origin') originPlace={lat:loc.lat(),lng:loc.lng()};
+      else destPlace={lat:loc.lat(),lng:loc.lng()};
+      if(originPlace&&destPlace) calcRoute();
+    }
+  });
+}
+
+// ===== SWAP =====
+function swapPoints(){
+  const ov=document.getElementById('origin-input').value;
+  const dv=document.getElementById('dest-input').value;
+  document.getElementById('origin-input').value=dv;
+  document.getElementById('dest-input').value=ov;
+  const tmp=originPlace; originPlace=destPlace; destPlace=tmp;
+  if(originPlace&&destPlace) calcRoute();
+}
+
+// ===== ROUTE =====
+function routeGo(){
+  const ov=document.getElementById('origin-input').value.trim();
+  const dv=document.getElementById('dest-input').value.trim();
+  if(!ov&&!dv){toast('ENTER ORIGIN & DESTINATION');return;}
+
+  const promises=[];
+  if(ov&&!originPlace) promises.push(geocodeText('origin',ov));
+  if(dv&&!destPlace) promises.push(geocodeText('dest',dv));
+  Promise.all(promises).then(()=>{
+    if(!destPlace){toast('ENTER DESTINATION');return;}
+    calcRoute();
+  });
+}
+
+function geocodeText(type,text){
+  return new Promise(resolve=>{
+    geocoder.geocode({address:text},(res,status)=>{
+      if(status==='OK'&&res[0]){
+        const loc=res[0].geometry.location;
+        if(type==='origin') originPlace={lat:loc.lat(),lng:loc.lng()};
+        else destPlace={lat:loc.lat(),lng:loc.lng()};
+      }
+      resolve();
+    });
+  });
+}
+
+function calcRoute(){
+  if(!destPlace){toast('DESTINATION REQUIRED');return;}
+
+  const origin=originPlace||
+    (DB.vehicle.lat?{lat:DB.vehicle.lat,lng:DB.vehicle.lng}:map.getCenter());
+
+  directionsService.route({
+    origin,
+    destination:destPlace,
+    travelMode:google.maps.TravelMode.DRIVING,
+    provideRouteAlternatives:false,
+  },(result,status)=>{
+    if(status==='OK'){
+      directionsRenderer.setDirections(result);
+      const route=result.routes[0].legs[0];
+      currentRouteSteps=route.steps;
+      stepIndex=0;
+
+      // Markers
+      if(window._origMk) window._origMk.setMap(null);
+      if(window._destMk) window._destMk.setMap(null);
+      window._origMk=new google.maps.Marker({
+        position:origin,map,
+        icon:{path:google.maps.SymbolPath.CIRCLE,scale:7,fillColor:'transparent',fillOpacity:0,strokeColor:'#C9A84C',strokeWeight:2}
+      });
+      window._destMk=new google.maps.Marker({
+        position:destPlace,map,
+        icon:{path:'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
+          fillColor:'#C9A84C',fillOpacity:1,strokeColor:'#C9A84C',strokeWeight:1,scale:1.8,anchor:new google.maps.Point(12,22)}
+      });
+
+      // Initial ETA
+      const etaMin=Math.round(route.duration.value/60);
+      document.getElementById('nav-eta').textContent=etaMin;
+      document.getElementById('nav-tdist').textContent=(route.distance.value/1000).toFixed(1);
+      const arr=new Date(); arr.setSeconds(arr.getSeconds()+route.duration.value);
+      let ah=arr.getHours(),am=arr.getMinutes(),aap=ah>=12?'PM':'AM';
+      ah=ah%12||12;
+      document.getElementById('nav-arr').textContent=ah+':'+String(am).padStart(2,'0')+' '+aap;
+      updateArrow('straight','Continue');
+      toast('ROUTE CALCULATED');
+      map.fitBounds(result.routes[0].bounds);
+    } else {
+      toast('ROUTE FAILED: '+status);
+    }
+  });
+}
+
+// ===== MODE =====
+function setMode(m,btn){
+  DB.vehicle.mode=m;
+  document.querySelectorAll('.mbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('mode-txt').textContent=m.charAt(0).toUpperCase()+m.slice(1)+' Mode';
+  toast('MODE: '+m.toUpperCase());
+}
+
+// ===== GADGETS =====
+function arm(id){
+  pendingGadget=id;
+  const g=DB.gadgets[id];
+  document.getElementById('modal-t').textContent=g.name.toUpperCase()+' — ARM SEQUENCE';
+  document.getElementById('modal-b').innerHTML=(g.red?'<span style="color:#c84040;font-weight:600">⚠ WARNING — </span>':'')+g.msg;
+  document.getElementById('overlay').classList.add('on');
+}
+function closeModal(){document.getElementById('overlay').classList.remove('on');pendingGadget=null;}
+function fire(){
+  if(!pendingGadget)return;
+  const msgs={ejector:'GOOD LUCK, 007',oil:'OIL SLICK DEPLOYED',boost:'NITRO ENGAGED',missile:'TARGET ELIMINATED'};
+  toast(msgs[pendingGadget]||DB.gadgets[pendingGadget].name.toUpperCase()+' ACTIVATED');
+  closeModal();
+}
+
+// ===== MUSIC =====
+function toggleMusic(){
+  musicOn=!musicOn;
+  document.getElementById('eqBars').classList.toggle('paused',!musicOn);
+  toast(musicOn?'AUDIO — PLAYING':'AUDIO — PAUSED');
+}
+
+// ===== NOTIF =====
+let notifIdx=0;
+function dismissNotif(){document.getElementById('notif').classList.add('gone');}
+setInterval(()=>{
+  notifIdx=(notifIdx+1)%DB.msgs.length;
+  document.getElementById('notif-text').textContent=DB.msgs[notifIdx];
+  const n=document.getElementById('notif'); n.classList.remove('gone');
+},45000);
+
+// ===== TOAST =====
+let toastTmr;
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTmr); toastTmr=setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+// KEYBOARD
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeModal();
+  const mb=document.querySelectorAll('.mbtn');
+  if(e.key==='1')mb[0].click();
+  if(e.key==='2')mb[1].click();
+  if(e.key==='3')mb[2].click();
+  if(e.key==='4')mb[3].click();
+  if(e.key==='Enter'&&document.activeElement.closest('#search-panel'))routeGo();
+});
+</script>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNGg&libraries=places&callback=initMap" async defer></script>
+</body>
+</html>
